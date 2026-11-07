@@ -9,6 +9,7 @@ const {
   sanitizeStats, mergeStats, normalizeRankField, normalizeLimit, displayName,
 } = require("./stats");
 const { createDb, getUser, upsertUser, leaderboard, summary } = require("./db");
+const { handleDesktopLogin } = require("./desktopLogin");
 
 const MAX_BODY = 8 * 1024; // 只收幾個數字，8KB 綽綽有餘；擋住灌爆 payload
 
@@ -64,6 +65,11 @@ function createServer(options = {}) {
     if (req.method === "OPTIONS") return json(res, 204, {});
 
     try {
+      // 桌面版登入中繼頁（Electron 用系統瀏覽器開這裡拿 token）
+      if (route === "GET /desktop-login") {
+        return handleDesktopLogin(url, res, { appId });
+      }
+
       if (route === "GET /api/health") {
         return json(res, 200, { ok: true });
       }
