@@ -1,0 +1,17 @@
+{
+  "name": "speakslow-stats",
+  "version": "1.0.0",
+  "private": true,
+  "description": "聲聲慢使用統計與排行榜 API（只收計數，不收逐字稿內容）",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "test": "node --test test/*.test.js"
+  },
+  "dependencies": {
+    "better-sqlite3": "^13.0.3"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
