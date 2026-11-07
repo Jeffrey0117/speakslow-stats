@@ -2,3 +2,11 @@ node_modules/
 data/
 .env
 .env.*
+
+# CloudPipe 部署產物。⚠️ 這個 repo 是 public，而 .pm2-ecosystem.json 裡有明文
+# 的環境變數（曾含 LETMEUSE_APP_SECRET）——沒 ignore 的話一次 `git add -A`
+# 就把金鑰推上公網（reelscript 2026-11-06 就是這樣中的）。
+.pm2-ecosystem.json
+.pm2-bg-ecosystem.json
+.deploy-state.json
+.pkg-hash

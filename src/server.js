@@ -10,6 +10,7 @@ const {
 } = require("./stats");
 const { createDb, getUser, upsertUser, leaderboard, summary } = require("./db");
 const { handleDesktopLogin } = require("./desktopLogin");
+const { createJwksCache } = require("./jwks");
 
 const MAX_BODY = 8 * 1024; // 只收幾個數字，8KB 綽綽有餘；擋住灌爆 payload
 
@@ -55,8 +56,22 @@ function readBody(req) {
 function createServer(options = {}) {
   const dbFile = options.dbFile || path.join(process.cwd(), "data", "stats.db");
   const db = options.db || createDb(dbFile);
-  const secret = options.secret || process.env.LETMEUSE_APP_SECRET || "";
   const appId = options.appId || process.env.LETMEUSE_APP_ID || "";
+  // LetMeUse 的位址走環境變數，不寫死（公開 repo 不放自架服務位址）
+  const lmuBaseUrl = (options.baseUrl || process.env.LETMEUSE_BASE_URL || "")
+    .replace(/\/+$/, "");
+  // 🔒 token 驗證只需要 LetMeUse 的公鑰（JWKS）——這台機器不持有 app secret。
+  // 理由見 src/auth.js 開頭。
+  //
+  // 自己建的才自己收：注入 jwks 的呼叫端（測試、腳本）負責自己的生命週期，
+  // 我們不去 stop 別人的。沒注入時這裡會起一個定時器＋發一次網路請求，所以
+  // 測試一律注入假的，免得 npm test 去打 production LetMeUse。
+  const ownsJwks = !options.jwks;
+  const jwks = options.jwks || createJwksCache({
+    onError: (e) => console.warn(`[speakslow-stats] JWKS 抓取失敗：${e.message}`),
+  });
+  if (ownsJwks) jwks.start();
+  const getKey = (kid) => jwks.getKey(kid);
 
   const server = http.createServer(async (req, res) => {
     const url = new URL(req.url, "http://localhost");
@@ -67,11 +82,15 @@ function createServer(options = {}) {
     try {
       // 桌面版登入中繼頁（Electron 用系統瀏覽器開這裡拿 token）
       if (route === "GET /desktop-login") {
-        return handleDesktopLogin(url, res, { appId });
+        return handleDesktopLogin(url, res, { appId, baseUrl: lmuBaseUrl });
       }
 
       if (route === "GET /api/health") {
-        return json(res, 200, { ok: true });
+        // 刻意「一律回 200」：JWKS 抓不到時重啟這個服務救不了（問題在上游），
+        // 而 CloudPipe 的 watchdog 探的就是這支 → 回 5xx 只會換來無用的重啟
+        // 迴圈。但狀態一定要露出來，否則就是「全部 401 卻一片綠燈」。
+        const s = typeof jwks.stats === "function" ? jwks.stats() : null;
+        return json(res, 200, { ok: true, ...(s ? { jwks: s } : {}) });
       }
 
       // 官網首頁的社會證明：使用者數與累計字數
@@ -96,10 +115,8 @@ function createServer(options = {}) {
 
       // 上傳統計（需登入）
       if (route === "POST /api/stats") {
-        if (!secret) return json(res, 503, { error: "server not configured" });
-
         const token = extractBearerToken(req.headers.authorization);
-        const payload = verifyLetMeUseToken(token, { secret, appId });
+        const payload = verifyLetMeUseToken(token, { getKey, appId });
         if (!payload) return json(res, 401, { error: "unauthorized" });
 
         let body;
@@ -117,7 +134,10 @@ function createServer(options = {}) {
         const merged = mergeStats(existing, clean.stats);
         const saved = upsertUser(db, {
           userId: payload.sub,
-          displayName: displayName(payload.name || payload.email),
+          // 🔒 絕對不要 fallback 到 email：/api/leaderboard 免登入又開 CORS *，
+          // 沒設暱稱的人（OAuth 註冊、清空名字的人）email 會被公開在排行榜上
+          // 任人爬。displayName() 對空值本來就回「匿名使用者」。
+          displayName: displayName(payload.name),
           stats: merged,
           leaderboardOptIn: body.leaderboardOptIn !== false,
         });
@@ -139,7 +159,10 @@ function createServer(options = {}) {
     }
   });
 
-  server.on("close", () => { try { db.close(); } catch (e) { /* ignore */ } });
+  server.on("close", () => {
+    if (ownsJwks) jwks.stop();
+    try { db.close(); } catch (e) { /* ignore */ }
+  });
   return server;
 }
 

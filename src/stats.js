@@ -70,9 +70,18 @@ function normalizeLimit(limit, fallback = 50, max = 100) {
   return Math.min(Math.floor(n), max);
 }
 
-/** 顯示名稱：沒給就用匿名，過長截斷，去掉換行避免破版 */
+/**
+ * 顯示名稱：沒給就用匿名，過長截斷，去掉換行避免破版。
+ *
+ * 🔒 一併拿掉 `<>&"'`：這個名字是使用者在 LetMeUse 自己設的，而它會出現在
+ * 免登入的 /api/leaderboard JSON 裡。官網或任何取用這個 feed 的前端只要用
+ * innerHTML 之類的方式渲染，`<svg onload=...>`（21 字，截斷擋不住）就是儲存型
+ * XSS。渲染端本來也該轉義，這裡是第二道（公開 feed 不知道誰在用）。
+ */
 function displayName(name) {
-  const s = typeof name === "string" ? name.replace(/[\r\n\t]/g, " ").trim() : "";
+  const s = typeof name === "string"
+    ? name.replace(/[\r\n\t]/g, " ").replace(/[<>&"']/g, "").trim()
+    : "";
   if (!s) return "匿名使用者";
   return s.slice(0, 24);
 }

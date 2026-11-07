@@ -24,7 +24,17 @@ const { createServer } = require("./src/server");
 const port = Number(process.env.PORT) || 3210;
 createServer().listen(port, () => {
   console.log(`[speakslow-stats] listening on ${port}`);
-  if (!process.env.LETMEUSE_APP_SECRET) {
-    console.warn("[speakslow-stats] LETMEUSE_APP_SECRET 未設定——上傳端點會回 503");
+  // token 驗證走 JWKS 公鑰，APP_ID 是唯一必備的設定（沒有就無法比對 token
+  // 屬於哪個 app → 上傳一律 401、桌面登入頁回 503）。
+  if (!process.env.LETMEUSE_APP_ID) {
+    console.warn("[speakslow-stats] LETMEUSE_APP_ID 未設定——上傳會全部 401、桌面登入頁回 503");
+  }
+  console.log(
+    `[speakslow-stats] JWKS: ${process.env.LETMEUSE_JWKS_URL
+      || (process.env.LETMEUSE_BASE_URL ? process.env.LETMEUSE_BASE_URL + "/api/jwks" : "(未設定，上傳會全部 401)")}`,
+  );
+  // 這台不需要 app secret（驗證只用公鑰）。還留著就是多一個外洩點。
+  if (process.env.LETMEUSE_APP_SECRET) {
+    console.warn("[speakslow-stats] 偵測到 LETMEUSE_APP_SECRET——這個服務已不需要它，建議從 .env 移除");
   }
 });
