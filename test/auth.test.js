@@ -132,10 +132,15 @@ test("格式異常一律回 null，不丟例外", () => {
   }
 });
 
-test("extractBearerToken 只接受 Bearer", () => {
+test("extractBearerToken 只接受 Bearer scheme（大小寫不分）", () => {
   assert.equal(extractBearerToken("Bearer abc"), "abc");
-  assert.equal(extractBearerToken("bearer abc"), null);
+  // 2026-11-08 改用 jwks-verify-kit 後，scheme 比對改成**不分大小寫**。
+  // RFC 7235 §2.1 明定 auth-scheme 不分大小寫，而 `bearer xxx` 是合法請求 ——
+  // 擋掉它只會製造「為什麼我這支 client 一直 401」的災難，而 token 本身的
+  // 簽章/claims 檢查一條都沒少，所以這不是放寬安全性。
+  assert.equal(extractBearerToken("bearer abc"), "abc");
   assert.equal(extractBearerToken("abc"), null);
   assert.equal(extractBearerToken(null), null);
   assert.equal(extractBearerToken("Bearer   "), null);
+  assert.equal(extractBearerToken("Basic abc"), null);
 });
