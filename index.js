@@ -34,7 +34,7 @@ createServer().listen(port, () => {
       || (process.env.LETMEUSE_BASE_URL ? process.env.LETMEUSE_BASE_URL + "/api/jwks" : "(未設定，上傳會全部 401)")}`,
   );
   // 這台不需要 app secret（驗證只用公鑰）。還留著就是多一個外洩點。
-  if (process.env.LETMEUSE_APP_SECRET) {
+  if (process.env.LETMEUSE_APP_SECRET) { // 本服務不需要它,偵測到就提醒移除
     console.warn("[speakslow-stats] 偵測到 LETMEUSE_APP_SECRET——這個服務已不需要它，建議從 .env 移除");
   }
 });
