@@ -26,7 +26,7 @@ const quiet = { onError: () => {} };
 test("抓到 JWKS 之後 getKey(kid) 回得到公鑰", async () => {
   const k = makeKeyPair("kid-a");
   const { fetchImpl } = stubFetch({ keys: [k.jwk] });
-  const cache = createJwksCache({ url: "http://x/jwks", fetchImpl, ...quiet });
+  const cache = createJwksCache({ url: "https://idp.test/jwks", fetchImpl, ...quiet });
 
   assert.equal(cache.getKey("kid-a"), null, "還沒抓之前應該是空的");
   await cache.refresh();
@@ -50,7 +50,7 @@ test("非 ES256 / 非 P-256 / 非簽章用途的條目一律濾掉", async () =>
       { ...makeKeyPair("no-kid").jwk, kid: undefined },
     ],
   });
-  const cache = createJwksCache({ url: "http://x/jwks", fetchImpl, ...quiet });
+  const cache = createJwksCache({ url: "https://idp.test/jwks", fetchImpl, ...quiet });
   await cache.refresh();
 
   assert.ok(cache.getKey("good"));
@@ -64,7 +64,7 @@ test("🔒 格式正確的空 JWKS 會清空快取——緊急撤銷金鑰必須
   // 就會繼續拿舊公鑰放行被盜金鑰簽的 token，直到有人想起來重啟 process。
   const k = makeKeyPair("leaked-kid");
   const { fetchImpl } = stubFetch([{ keys: [k.jwk] }, { keys: [] }]);
-  const cache = createJwksCache({ url: "http://x/jwks", fetchImpl, ...quiet });
+  const cache = createJwksCache({ url: "https://idp.test/jwks", fetchImpl, ...quiet });
 
   await cache.refresh();
   assert.ok(cache.getKey("leaked-kid"));
@@ -78,7 +78,7 @@ test("空 JWKS 會透過 onError 吼出來（fail-closed 不能無聲）", async
   const { fetchImpl } = stubFetch({ keys: [] });
   const errors = [];
   const cache = createJwksCache({
-    url: "http://x/jwks", fetchImpl, onError: (e) => errors.push(e.message),
+    url: "https://idp.test/jwks", fetchImpl, onError: (e) => errors.push(e.message),
   });
   await cache.refresh();
   assert.equal(errors.length, 1);
@@ -90,7 +90,7 @@ test("傳輸層失敗（丟錯 / HTTP 500 / 壞 JSON）保留舊快取且不拋�
   const { fetchImpl } = stubFetch([
     { keys: [k.jwk] }, new Error("ECONNREFUSED"), "http-error", "bad-json",
   ]);
-  const cache = createJwksCache({ url: "http://x/jwks", fetchImpl, ...quiet });
+  const cache = createJwksCache({ url: "https://idp.test/jwks", fetchImpl, ...quiet });
 
   await cache.refresh();
   for (let i = 0; i < 3; i += 1) {
@@ -102,7 +102,7 @@ test("傳輸層失敗（丟錯 / HTTP 500 / 壞 JSON）保留舊快取且不拋�
 
 test("第一次就失敗時 getKey 回 null，不丟例外", async () => {
   const { fetchImpl } = stubFetch(new Error("boom"));
-  const cache = createJwksCache({ url: "http://x/jwks", fetchImpl, ...quiet });
+  const cache = createJwksCache({ url: "https://idp.test/jwks", fetchImpl, ...quiet });
   await cache.refresh();
   assert.equal(cache.getKey("anything"), null);
 });
@@ -110,7 +110,7 @@ test("第一次就失敗時 getKey 回 null，不丟例外", async () => {
 test("併發 refresh 只打一次網路", async () => {
   const k = makeKeyPair("kid-a");
   const { fetchImpl, calls } = stubFetch({ keys: [k.jwk] });
-  const cache = createJwksCache({ url: "http://x/jwks", fetchImpl, ...quiet });
+  const cache = createJwksCache({ url: "https://idp.test/jwks", fetchImpl, ...quiet });
 
   await Promise.all([cache.refresh(), cache.refresh(), cache.refresh()]);
   assert.equal(calls.n, 1);
@@ -121,7 +121,7 @@ test("kid 沒中會觸發背景重抓（金鑰輪換時自動跟上）", async (
   const newKey = makeKeyPair("kid-new");
   const { fetchImpl, calls } = stubFetch([{ keys: [oldKey.jwk] }, { keys: [newKey.jwk] }]);
   const cache = createJwksCache({
-    url: "http://x/jwks", fetchImpl, missCooldownMs: 0, ...quiet,
+    url: "https://idp.test/jwks", fetchImpl, missCooldownMs: 0, ...quiet,
   });
 
   await cache.refresh();
@@ -137,7 +137,7 @@ test("🔒 未知 kid 的冷卻真的有在節流（不然等於幫人 DoS LetMe
   const k = makeKeyPair("kid-a");
   const { fetchImpl, calls } = stubFetch({ keys: [k.jwk] });
   const cache = createJwksCache({
-    url: "http://x/jwks", fetchImpl, missCooldownMs: 10_000, ...quiet,
+    url: "https://idp.test/jwks", fetchImpl, missCooldownMs: 10_000, ...quiet,
   });
   await cache.refresh();
   assert.equal(calls.n, 1);
@@ -155,7 +155,7 @@ test("🔒 卡死的 fetch 不能把快取永久鎖住（node fetch 沒有預設
   const k = makeKeyPair("kid-a");
   const { fetchImpl, calls } = stubFetch(["stall", { keys: [k.jwk] }]);
   const cache = createJwksCache({
-    url: "http://x/jwks", fetchImpl, timeoutMs: 30, missCooldownMs: 0, ...quiet,
+    url: "https://idp.test/jwks", fetchImpl, timeoutMs: 30, missCooldownMs: 0, ...quiet,
   });
 
   await cache.refresh(); // 第一次卡住 → 應該在 30ms 後逾時放掉
@@ -172,7 +172,7 @@ test("🔒 太久沒成功更新就當作沒金鑰（不拿不知多舊的公鑰
   const k = makeKeyPair("kid-a");
   const { fetchImpl } = stubFetch([{ keys: [k.jwk] }, new Error("down")]);
   const cache = createJwksCache({
-    url: "http://x/jwks", fetchImpl, maxStaleMs: 1, missCooldownMs: 10_000, ...quiet,
+    url: "https://idp.test/jwks", fetchImpl, maxStaleMs: 1, missCooldownMs: 10_000, ...quiet,
   });
   await cache.refresh();
   assert.ok(cache.getKey("kid-a"));
@@ -185,7 +185,7 @@ test("start() 會先抓一次並排定時刷新；stop() 之後不再抓", async
   const k = makeKeyPair("kid-a");
   const { fetchImpl, calls } = stubFetch({ keys: [k.jwk] });
   const cache = createJwksCache({
-    url: "http://x/jwks", fetchImpl, refreshMs: 20, missCooldownMs: 10_000, ...quiet,
+    url: "https://idp.test/jwks", fetchImpl, refreshMs: 20, missCooldownMs: 10_000, ...quiet,
   });
 
   cache.start();
@@ -205,7 +205,7 @@ test("refreshMs: 0 不排定時器（測試用的開關）", async () => {
   const k = makeKeyPair("kid-a");
   const { fetchImpl, calls } = stubFetch({ keys: [k.jwk] });
   const cache = createJwksCache({
-    url: "http://x/jwks", fetchImpl, refreshMs: 0, missCooldownMs: 10_000, ...quiet,
+    url: "https://idp.test/jwks", fetchImpl, refreshMs: 0, missCooldownMs: 10_000, ...quiet,
   });
   cache.start();
   await cache.whenIdle();
@@ -218,7 +218,7 @@ test("getKey 在 inFlight 期間不會再開第二次抓取", async () => {
   const k = makeKeyPair("kid-a");
   const { fetchImpl, calls } = stubFetch({ keys: [k.jwk] });
   const cache = createJwksCache({
-    url: "http://x/jwks", fetchImpl, missCooldownMs: 0, ...quiet,
+    url: "https://idp.test/jwks", fetchImpl, missCooldownMs: 0, ...quiet,
   });
   const p = cache.refresh();
   cache.getKey("whatever");
@@ -230,7 +230,7 @@ test("getKey 在 inFlight 期間不會再開第二次抓取", async () => {
 test("stats() 回得出診斷資訊", async () => {
   const k = makeKeyPair("kid-a");
   const { fetchImpl } = stubFetch({ keys: [k.jwk] });
-  const cache = createJwksCache({ url: "http://x/jwks", fetchImpl, ...quiet });
+  const cache = createJwksCache({ url: "https://idp.test/jwks", fetchImpl, ...quiet });
   assert.deepEqual(
     { keys: cache.stats().keys, lastSuccessAt: cache.stats().lastSuccessAt },
     { keys: 0, lastSuccessAt: null },
@@ -238,7 +238,7 @@ test("stats() 回得出診斷資訊", async () => {
   await cache.refresh();
   const s = cache.stats();
   assert.equal(s.keys, 1);
-  assert.equal(s.url, "http://x/jwks");
+  assert.equal(s.url, "https://idp.test/jwks");
   assert.ok(s.lastSuccessAt > 0);
   assert.equal(s.lastError, null);
 });
@@ -246,7 +246,7 @@ test("stats() 回得出診斷資訊", async () => {
 test("getKey 對非字串 kid 回 null", async () => {
   const k = makeKeyPair("kid-a");
   const { fetchImpl } = stubFetch({ keys: [k.jwk] });
-  const cache = createJwksCache({ url: "http://x/jwks", fetchImpl, ...quiet });
+  const cache = createJwksCache({ url: "https://idp.test/jwks", fetchImpl, ...quiet });
   await cache.refresh();
   for (const bad of [null, undefined, "", 123, {}]) {
     assert.equal(cache.getKey(bad), null);
